@@ -1,0 +1,287 @@
+@import "tailwindcss";
+
+@theme {
+  /* ── Radius: every namespace value is 0. Nothing can round. ───────────── */
+  --radius-xs:   0px;
+  --radius-sm:   0px;
+  --radius-md:   0px;
+  --radius-lg:   0px;
+  --radius-xl:   0px;
+  --radius-2xl:  0px;
+  --radius-3xl:  0px;
+  --radius-4xl:  0px;
+
+  /* ── Surfaces ─────────────────────────────────────────────────────────── */
+  --color-canvas:        #0B0B0A;
+  --color-sunken:        #060605;
+  --color-raised:        #151613;
+  --color-raised-2:      #1E201C;
+
+  /* ── Lines. `rule` is DECORATIVE (1.43:1). `border` is INTERACTIVE (3.77:1). */
+  --color-rule:          #2B2E28;
+  --color-border:        #6A6E62;
+  --color-hatch:         #1E1F1C;
+
+  /* ── Text ─────────────────────────────────────────────────────────────── */
+  --color-text:          #F2F3EC;
+  --color-text-2:        #A6A99D;
+  --color-text-3:        #8E9284;
+  --color-ink:           #0B0B0A;
+
+  /* ── Accent ───────────────────────────────────────────────────────────── */
+  --color-accent:        #C7F73C;
+  --color-accent-press:  #A9D62F;
+  --color-accent-dim:    #8FB32A;
+  --color-accent-wash:   #222710;   /* precomputed flat 12% — never an alpha layer */
+
+  /* ── Semantic slot states ─────────────────────────────────────────────── */
+  --color-state-open:    #C7F73C;
+  --color-state-filling: #FFA300;
+  --color-state-full:    #FF5A2B;
+  --color-state-party:   #FF3EA5;
+  --color-state-blocked: #8E9284;
+
+  /* ── Fonts ────────────────────────────────────────────────────────────── */
+  /* Width is set via font-variation-settings. Do NOT also use font-stretch —
+     font-variation-settings wins and the two silently conflict.              */
+  --font-display: var(--font-archivo), "Helvetica Neue", Arial, sans-serif;
+  --font-display--font-variation-settings: "wdth" 100;
+
+  --font-display-x: var(--font-archivo), "Helvetica Neue", Arial, sans-serif;
+  --font-display-x--font-variation-settings: "wdth" 125;   /* hero only, ≥28px */
+
+  --font-body: var(--font-chivo), "Helvetica Neue", Arial, sans-serif;
+
+  --font-mono: var(--font-martian-mono), Menlo, Consolas, monospace;
+  --font-mono--font-variation-settings: "wdth" 75;
+  --font-mono--font-feature-settings: "tnum" 1, "lnum" 1;
+
+  --font-mono-w: var(--font-martian-mono), Menlo, Consolas, monospace;
+  --font-mono-w--font-variation-settings: "wdth" 100;      /* grand total only */
+  --font-mono-w--font-feature-settings: "tnum" 1, "lnum" 1;
+
+  /* Overrides Tailwind's defaults so no system-ui stack can leak in.
+     `--font-sans` alone is NOT enough: Tailwind v4's preflight sets html's
+     font-family from `--default-font-family`, whose built-in fallback chain
+     contains -apple-system / Segoe UI / Roboto. Setting these two kills that
+     chain at the source rather than merely masking it on `body`. */
+  --font-sans: var(--font-body);
+  --default-font-family: var(--font-body);
+  --default-mono-font-family: var(--font-mono);
+
+  /* ── Display type ─────────────────────────────────────────────────────── */
+  --text-display-1: 2.5rem;
+  --text-display-1--line-height: 0.92;
+  --text-display-1--letter-spacing: -0.03em;
+  --text-display-1--font-weight: 800;
+
+  --text-display-2: 2rem;
+  --text-display-2--line-height: 0.95;
+  --text-display-2--letter-spacing: -0.025em;
+  --text-display-2--font-weight: 800;
+
+  --text-display-3: 1.5rem;
+  --text-display-3--line-height: 1.05;
+  --text-display-3--letter-spacing: -0.02em;
+  --text-display-3--font-weight: 700;
+
+  --text-heading: 1.125rem;
+  --text-heading--line-height: 1.2;
+  --text-heading--letter-spacing: -0.01em;
+  --text-heading--font-weight: 700;
+
+  --text-eyebrow: 0.75rem;
+  --text-eyebrow--line-height: 1;
+  --text-eyebrow--letter-spacing: 0.14em;
+  --text-eyebrow--font-weight: 700;
+
+  --text-label: 0.75rem;
+  --text-label--line-height: 1;
+  --text-label--letter-spacing: 0.12em;
+  --text-label--font-weight: 700;
+
+  --text-button: 0.875rem;
+  --text-button--line-height: 1;
+  --text-button--letter-spacing: 0.06em;
+  --text-button--font-weight: 700;
+
+  --text-tag: 0.6875rem;
+  --text-tag--line-height: 1;
+  --text-tag--letter-spacing: 0.1em;
+  --text-tag--font-weight: 700;
+
+  /* ── Body type ────────────────────────────────────────────────────────── */
+  --text-body-lg: 1.125rem;
+  --text-body-lg--line-height: 1.55;
+  --text-body-lg--letter-spacing: 0em;
+  --text-body-lg--font-weight: 400;
+
+  --text-body: 1rem;
+  --text-body--line-height: 1.6;
+  --text-body--letter-spacing: 0.005em;
+  --text-body--font-weight: 400;
+
+  --text-body-sm: 0.875rem;
+  --text-body-sm--line-height: 1.5;
+  --text-body-sm--letter-spacing: 0.01em;
+  --text-body-sm--font-weight: 400;
+
+  --text-caption: 0.75rem;
+  --text-caption--line-height: 1.4;
+  --text-caption--letter-spacing: 0.02em;
+  --text-caption--font-weight: 500;
+
+  /* ── Numerals ─────────────────────────────────────────────────────────── */
+  --text-mono-xl: 2rem;
+  --text-mono-xl--line-height: 1;
+  --text-mono-xl--letter-spacing: -0.04em;
+  --text-mono-xl--font-weight: 600;
+
+  --text-mono-lg: 1.25rem;
+  --text-mono-lg--line-height: 1;
+  --text-mono-lg--letter-spacing: -0.03em;
+  --text-mono-lg--font-weight: 600;
+
+  --text-mono-md: 1rem;
+  --text-mono-md--line-height: 1.2;
+  --text-mono-md--letter-spacing: -0.03em;
+  --text-mono-md--font-weight: 500;
+
+  --text-mono-sm: 0.8125rem;
+  --text-mono-sm--line-height: 1.3;
+  --text-mono-sm--letter-spacing: -0.02em;
+  --text-mono-sm--font-weight: 500;
+
+  --text-mono-xs: 0.6875rem;
+  --text-mono-xs--line-height: 1;
+  --text-mono-xs--letter-spacing: 0em;
+  --text-mono-xs--font-weight: 600;
+
+  /* ── Spacing (4px base; Tailwind derives the whole ramp) ───────────────── */
+  --spacing: 0.25rem;
+
+  /* ── Breakpoints ──────────────────────────────────────────────────────── */
+  --breakpoint-sm:  480px;
+  --breakpoint-md:  768px;
+  --breakpoint-lg:  1024px;
+  --breakpoint-xl:  1280px;
+  --breakpoint-2xl: 1536px;
+
+  /* ── Containers ───────────────────────────────────────────────────────── */
+  --container-flow: 34rem;    /* 544px booking column */
+  --container-rail: 20rem;    /* 320px order summary  */
+  --container-page: 71.5rem;  /* 1144px page shell    */
+
+  /* ── Motion ───────────────────────────────────────────────────────────── */
+  --ease-out:    cubic-bezier(0.2, 0, 0, 1);
+  --ease-in:     cubic-bezier(0.4, 0, 1, 1);
+  --ease-linear: linear;
+
+  /* ── Shadows: cleared. Only 0-blur inset rings, written inline. ───────── */
+  --shadow-*: initial;
+  --drop-shadow-*: initial;
+  --blur-*: initial;
+}
+
+/* ── Extra tokens Tailwind doesn't namespace ───────────────────────────── */
+:root {
+  --duration-instant: 90ms;
+  --duration-fast:    140ms;
+  --duration-base:    200ms;
+  --duration-slow:    260ms;
+
+  /* 45° hatch for blocked / full / disabled. Two pitches. */
+  --hatch-4: repeating-linear-gradient(
+    45deg, var(--color-hatch) 0 1px, transparent 1px 4px);
+  --hatch-6: repeating-linear-gradient(
+    45deg, var(--color-hatch) 0 1px, transparent 1px 6px);
+}
+
+@layer base {
+  html {
+    background-color: var(--color-canvas);
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    background-color: var(--color-canvas);
+    color: var(--color-text);
+    font-family: var(--font-body);
+    font-size: var(--text-body);
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  /* Headings use the display face by default. */
+  h1, h2, h3, h4, h5, h6 {
+    font-family: var(--font-display);
+    font-variation-settings: "wdth" 100;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+  }
+
+  /* Every figure is tabular, everywhere, always. */
+  code, kbd, samp, pre, time, output, [data-numeric] {
+    font-family: var(--font-mono);
+    font-variation-settings: "wdth" 75;
+    font-variant-numeric: tabular-nums lining-nums;
+    letter-spacing: -0.03em;
+  }
+
+  /* Controls inherit type — the UA sans stack must never appear. */
+  button, input, select, textarea, optgroup {
+    font: inherit;
+    color: inherit;
+    background: none;
+  }
+
+  /* One focus treatment, applied once. Geometric, not colour-only. */
+  :focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+    box-shadow: inset 0 0 0 2px var(--color-accent);
+  }
+
+  @media (forced-colors: active) {
+    :focus-visible { outline-color: Highlight; }
+  }
+
+  ::selection {
+    background-color: var(--color-accent);
+    color: var(--color-ink);
+  }
+
+  ::placeholder { color: var(--color-text-3); opacity: 1; }
+
+  /* Hairline rules never render as a rounded or shaded box. */
+  hr { border: 0; border-top: 1px solid var(--color-rule); }
+
+  img, svg, video, canvas { max-width: 100%; height: auto; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   THE RADIUS BACKSTOP — DO NOT REMOVE, DO NOT MOVE INTO @layer.
+
+   Zeroing --radius-* kills rounded-sm … rounded-4xl, but `rounded-full` is a
+   STATIC utility (calc(infinity * 1px)) and survives, as does any arbitrary
+   value like rounded-[6px] or a third-party stylesheet.
+
+   Unlayered CSS beats every @layer regardless of specificity, so this rule
+   sits outside all layers and wins against Tailwind's utilities. !important
+   additionally defeats inline styles from any embedded widget.
+
+   border-radius is 0 across this entire product. There is no exception.
+   ══════════════════════════════════════════════════════════════════════════ */
+*, *::before, *::after {
+  border-radius: 0 !important;
+}

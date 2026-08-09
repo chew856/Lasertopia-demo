@@ -1,0 +1,210 @@
+/*
+ * The party sheet's print stylesheet — STRATEGY §4.7, COPY.md §13.9.
+ *
+ * "A physical artifact for the floor, not a screenshot of the app." So this is not the dark
+ * canvas with a print override bolted on: the sheet is black on white **on screen as well**,
+ * because what a manager sees before pressing Print has to be what comes out of the printer.
+ *
+ * Three constraints from the spec drive everything here:
+ *   - readable at arm's length on a clipboard in a loud room  -> 11pt base, 34pt honoree name
+ *   - one page per party                                       -> `page-break-after` per sheet
+ *   - no colour dependence                                     -> pure black on pure white,
+ *     with weight and rule thickness carrying every distinction
+ *
+ * No colour keyword here is a hex value and no rule uses a radius, a shadow or a blur; the
+ * whole file is greyscale by construction, which is the only way a fax-quality office printer
+ * reproduces it faithfully.
+ */
+
+.sheet-page {
+  background: white;
+  color: black;
+  width: 100%;
+  max-width: 7.5in;
+  margin: 0 auto 1.5rem;
+  padding: 0.5in;
+  border: 1px solid black;
+  font-size: 11pt;
+  line-height: 1.35;
+}
+
+.sheet-honoree {
+  font-size: 34pt;
+  line-height: 1;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  margin: 0;
+}
+
+.sheet-age {
+  font-size: 15pt;
+  font-weight: 700;
+  margin: 0.15rem 0 0;
+}
+
+.sheet-date {
+  font-size: 20pt;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  margin: 0.5rem 0 0;
+}
+
+.sheet-rule {
+  border: 0;
+  border-top: 2px solid black;
+  margin: 0.5rem 0;
+}
+
+.sheet-rule-thin {
+  border: 0;
+  border-top: 1px solid black;
+  margin: 0.4rem 0;
+}
+
+.sheet-facts {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.4rem 1rem;
+  margin: 0;
+}
+
+.sheet-label {
+  font-size: 8.5pt;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  margin: 0;
+}
+
+.sheet-value {
+  font-size: 13pt;
+  font-weight: 700;
+  margin: 0;
+}
+
+.sheet-section {
+  margin-top: 0.6rem;
+}
+
+.sheet-games {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin: 0.3rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.sheet-game {
+  border: 2px solid black;
+  padding: 0.2rem 0.55rem;
+  font-size: 15pt;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.sheet-list {
+  margin: 0.25rem 0 0;
+  padding-left: 1.1rem;
+}
+
+.sheet-allergies {
+  border: 3px solid black;
+  padding: 0.5rem;
+  margin-top: 0.6rem;
+}
+
+.sheet-allergies-body {
+  font-size: 14pt;
+  font-weight: 700;
+  margin: 0.2rem 0 0;
+}
+
+.sheet-nutfree {
+  font-size: 10pt;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  margin: 0.35rem 0 0;
+}
+
+.sheet-checklist {
+  margin: 0.3rem 0 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.3rem 1rem;
+}
+
+.sheet-check {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 11pt;
+}
+
+.sheet-box {
+  display: inline-block;
+  width: 0.9rem;
+  height: 0.9rem;
+  border: 2px solid black;
+  flex: none;
+}
+
+.sheet-timefield {
+  margin-left: auto;
+  border-bottom: 1px solid black;
+  min-width: 4.5rem;
+  font-size: 8.5pt;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.sheet-hostline {
+  margin-top: 0.5rem;
+  border-bottom: 1px solid black;
+  min-height: 1.6rem;
+  font-size: 8.5pt;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.sheet-foot {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-top: 0.6rem;
+  font-size: 9pt;
+}
+
+@media print {
+  html,
+  body {
+    background: white;
+    color: black;
+  }
+
+  .sheet-noprint {
+    display: none !important;
+  }
+
+  .sheet-page {
+    border: 0;
+    margin: 0;
+    padding: 0.35in;
+    max-width: none;
+    page-break-after: always;
+    break-after: page;
+  }
+
+  .sheet-page:last-of-type {
+    page-break-after: auto;
+    break-after: auto;
+  }
+
+  @page {
+    margin: 0.4in;
+  }
+}

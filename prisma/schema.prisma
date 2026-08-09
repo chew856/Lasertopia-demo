@@ -1,0 +1,547 @@
+// Lasertopia booking platform — data model.
+// Implements RULES.md §6. Every seeded value lives in a row, never in application code (§2.0).
+//
+// PORTABILITY (SQLite dev -> Postgres prod)
+// -----------------------------------------
+// Switching to Postgres is: (1) `provider = "postgresql"` below, (2) point DATABASE_URL at
+// Postgres, (3) re-run `prisma migrate dev`. Nothing else changes, because this schema
+// deliberately avoids everything that differs between the two connectors:
+//   * No `enum` types      — SQLite has none. Enumerated columns are `String` and the allowed
+//                            values are listed in the comment above each one; the TypeScript
+//                            unions in src/lib/domain/types.ts are the compile-time guard.
+//   * No `Json` columns    — SQLite has none. JSON payloads are stored as `String`.
+//   * No `Decimal`         — money is ALWAYS integer cents (`Int`). Floats on currency are a defect.
+//   * No native `Date`     — calendar dates are `String` "YYYY-MM-DD" in America/Winnipeg local
+//                            time. A DateTime pinned to "UTC midnight" silently becomes the wrong
+//                            local day in a westward zone; a wall-clock date string cannot.
+//   * No arrays / citext / tstzrange in the schema itself (see BookingRoomSlot for the one place
+//                            Postgres can do strictly better, and what to add there).
+//
+// TIME REPRESENTATION
+//   * Template times (windows, game sets, hours) are `Int` minutes-from-midnight, local.
+//   * Absolute instants are `DateTime` (UTC). Conversion is src/lib/domain/time.ts.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  // -> change to "postgresql" for production. No other schema edit is required.
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// =====================================================================================
+// 6.1  Configuration and inventory  (all manager-editable)
+// =====================================================================================
+
+/// The §2.0 Configuration Registry. One row per CFG.* key. Nothing in this table may
+/// also exist as a literal in application code — src/lib/domain/config.ts parses these
+/// rows into the typed EngineConfig every domain function takes as a parameter.
+model Setting {
+  key             String   @id
+  value           String
+  /// INT | DECIMAL | BOOL | STRING | DURATION_MINUTES | MONEY_CENTS
+  valueType       String
+  description     String
+  updatedAt       DateTime @updatedAt
+  updatedByUserId String?
+
+  updatedBy ManagerUser? @relation(fields: [updatedByUserId], references: [id])
+}
+
+/// Physical party room inventory (RULES §3.2). Rooms exist independently of any window.
+model Room {
+  id        String  @id
+  name      String
+  capacity  Int
+  isActive  Boolean @default(true)
+  sortOrder Int     @default(0)
+  notes     String?
+
+  configurations RoomConfigurationRoom[]
+  bookingSlots   BookingRoomSlot[]
+}
+
+/// A bookable unit of one or more rooms (RULES §3.3).
+/// `capacity` is authoritative and OVERRIDES the sum of member room capacities (R-27):
+/// RM1(14) + RM2(12) is a configuration of capacity 20, not 26.
+model RoomConfiguration {
+  id                String  @id
+  code              String  @unique
+  name              String
+  /// R-27. Authoritative. The engine must never sum member room capacities.
+  capacity          Int
+  /// MUST equal the member room count. R-25 ranks by this first.
+  roomSlotsConsumed Int
+  priority          Int     @default(0)
+  isActive          Boolean @default(true)
+  notes             String?
+
+  rooms         RoomConfigurationRoom[]
+  offerings     WindowOffering[]
+  partyBookings PartyBooking[]
+}
+
+model RoomConfigurationRoom {
+  id                  String @id @default(cuid())
+  roomConfigurationId String
+  roomId              String
+  sortOrder           Int    @default(0)
+
+  roomConfiguration RoomConfiguration @relation(fields: [roomConfigurationId], references: [id], onDelete: Cascade)
+  room              Room              @relation(fields: [roomId], references: [id], onDelete: Cascade)
+
+  @@unique([roomConfigurationId, roomId])
+  @@index([roomId])
+}
+
+/// The two-hour party window template (RULES §3.4). Instantiated on a date by a booking.
+model PartyWindow {
+  id           String  @id
+  /// 0 = Sunday .. 6 = Saturday (JS getUTCDay convention)
+  dayOfWeek    Int
+  startMinutes Int
+  endMinutes   Int
+  label        String
+  isActive     Boolean @default(true)
+  /// R-28: optional hard cap on parties per window. Seeded null = unlimited; the room
+  /// inventory is what actually limits how many parties fit.
+  maxParties   Int?
+
+  offerings WindowOffering[]
+  gameSets  PartyGameSet[]
+  parties   PartyBooking[]
+
+  @@unique([dayOfWeek, startMinutes])
+}
+
+/// Which room configurations are sold in which window (RULES §3.4).
+/// `isOffered` is the single boolean behind OQ-10 / OQ-14 — flipping it needs no deploy.
+model WindowOffering {
+  id                  String  @id @default(cuid())
+  partyWindowId       String
+  roomConfigurationId String
+  isOffered           Boolean @default(true)
+  priority            Int     @default(0)
+
+  partyWindow       PartyWindow       @relation(fields: [partyWindowId], references: [id], onDelete: Cascade)
+  roomConfiguration RoomConfiguration @relation(fields: [roomConfigurationId], references: [id], onDelete: Cascade)
+
+  @@unique([partyWindowId, roomConfigurationId])
+}
+
+/// R-15. One party's reserved game times inside a window. NEVER a flat hardcoded list.
+model PartyGameSet {
+  id            String  @id
+  partyWindowId String
+  setIndex      Int
+  isActive      Boolean @default(true)
+
+  partyWindow PartyWindow        @relation(fields: [partyWindowId], references: [id], onDelete: Cascade)
+  times       PartyGameSetTime[]
+  gameSlots   GameSlot[]
+  bookedGames BookingGame[]
+
+  @@unique([partyWindowId, setIndex])
+}
+
+model PartyGameSetTime {
+  id             String @id @default(cuid())
+  partyGameSetId String
+  sortOrder      Int
+  startMinutes   Int
+  /// BRIEF (verbatim from the manager) | MANAGER (added later in the backend)
+  source         String @default("BRIEF")
+
+  partyGameSet PartyGameSet @relation(fields: [partyGameSetId], references: [id], onDelete: Cascade)
+
+  @@unique([partyGameSetId, startMinutes])
+}
+
+/// R-02 / R-03. Public operating hours and the first/last public game start per weekday.
+model OperatingHours {
+  id                     String  @id @default(cuid())
+  dayOfWeek              Int     @unique
+  opensMinutes           Int
+  closesMinutes          Int
+  firstPublicGameMinutes Int
+  lastPublicGameMinutes  Int
+  isOpen                 Boolean @default(true)
+}
+
+/// R-04. The weekend 10:15 / 10:30 / 10:45 / 11:00 games. Materialise as mode PARTY_ONLY
+/// and NEVER release to the public on any lead time (R-19).
+model PartyOnlyGameTime {
+  id           String @id @default(cuid())
+  dayOfWeek    Int
+  startMinutes Int
+
+  @@unique([dayOfWeek, startMinutes])
+}
+
+/// R-06. Empty at seed; exists so the manager can close a date without a deploy (OQ-27).
+model Closure {
+  id             String  @id @default(cuid())
+  /// "YYYY-MM-DD" local Winnipeg calendar date.
+  date           String  @unique
+  reason         String
+  blocksParties  Boolean @default(true)
+  blocksPublic   Boolean @default(true)
+}
+
+/// R-39. Party packages.
+model Package {
+  id                    String  @id
+  code                  String  @unique
+  name                  String
+  basePriceCents        Int
+  extraGuestPriceCents  Int
+  baseGuests            Int
+  gamesIncluded         Int
+  roomMinutes           Int
+  /// OQ-02 — the single most revenue-material default in the spec (R-42).
+  includesPizza         Boolean
+  includesCupcakes      Boolean
+  includesHotDogOption  Boolean
+  funCardCentsPerGuest  Int     @default(0)
+  includesLazerFrenzy   Boolean @default(false)
+  includesTyphoon       Boolean @default(false)
+  /// R-46. Around The World is false: it already includes a $10 fun card per guest.
+  arcadeCardEligible    Boolean @default(true)
+  descriptionMarkdown   String
+  isActive              Boolean @default(true)
+  sortOrder             Int     @default(0)
+
+  partyBookings PartyBooking[]
+  addOnEligibility AddOnPackageEligibility[]
+}
+
+/// R-41. Validated contiguous and non-overlapping on save (validatePizzaTiers).
+model PizzaTier {
+  id         String @id @default(cuid())
+  minGuests  Int
+  maxGuests  Int
+  pizzaCount Int
+
+  @@unique([minGuests])
+}
+
+model AddOn {
+  id                   String  @id
+  code                 String  @unique
+  name                 String
+  /// PER_GUEST | PER_UNIT
+  pricingMode          String
+  priceCents           Int
+  /// R-51. Pizzas and wings are priced tax-INCLUDED and must never have tax applied.
+  taxIncluded          Boolean
+  requiresOptionChoice Boolean @default(false)
+  /// R-47. The two arcade cards share one group and are mutually exclusive.
+  exclusiveGroup       String?
+  description          String
+  isActive             Boolean @default(true)
+  sortOrder            Int     @default(0)
+
+  eligibility  AddOnPackageEligibility[]
+  options      AddOnOption[]
+  bookingLines BookingAddOn[]
+}
+
+/// R-46. Which packages an add-on may be sold against.
+model AddOnPackageEligibility {
+  id        String @id @default(cuid())
+  addOnId   String
+  packageId String
+
+  addOn      AddOn   @relation(fields: [addOnId], references: [id], onDelete: Cascade)
+  packageRef Package @relation(fields: [packageId], references: [id], onDelete: Cascade)
+
+  @@unique([addOnId, packageId])
+}
+
+/// Pizza toppings and wing sauces.
+model AddOnOption {
+  id              String @id @default(cuid())
+  addOnId         String
+  label           String
+  priceDeltaCents Int    @default(0)
+  sortOrder       Int    @default(0)
+
+  addOn        AddOn          @relation(fields: [addOnId], references: [id], onDelete: Cascade)
+  bookingLines BookingAddOn[]
+
+  @@unique([addOnId, label])
+}
+
+/// R-08. Public laser tag per-person pricing, tax-exclusive.
+model GameSlotPricing {
+  id                   String  @id @default(cuid())
+  gameCount            Int     @unique
+  pricePerPersonCents  Int
+  taxIncluded          Boolean @default(false)
+}
+
+// =====================================================================================
+// 6.2  Materialised availability
+// =====================================================================================
+
+/// One row per (date, startMinutes) — RULES §1 glossary, R-03.
+/// Regenerated when OperatingHours / PartyGameSet / Closure change; rows with bookings
+/// MUST survive regeneration.
+model GameSlot {
+  id                   String    @id @default(cuid())
+  /// "YYYY-MM-DD" local Winnipeg calendar date.
+  date                 String
+  startMinutes         Int
+  startsAtUtc          DateTime
+  /// PUBLIC | PARTY_HELD | PARTY_ONLY | BLOCKED
+  mode                 String
+  /// Set when the slot came from a configured reserved time (R-15).
+  sourcePartyGameSetId String?
+  /// Audit of R-18.
+  releasedToPublicAt   DateTime?
+  blockedReason        String?
+
+  sourcePartyGameSet PartyGameSet? @relation(fields: [sourcePartyGameSetId], references: [id])
+  bookingGames       BookingGame[]
+
+  @@unique([date, startMinutes])
+  @@index([date, mode])
+}
+
+// =====================================================================================
+// 6.3  Bookings
+// =====================================================================================
+
+model Booking {
+  id                     String    @id @default(cuid())
+  reference              String    @unique
+  /// PUBLIC_GAME | PARTY
+  type                   String
+  /// HOLD | CONFIRMED | CANCELLED | COMPLETED | NO_SHOW
+  status                 String
+  /// "YYYY-MM-DD" local Winnipeg calendar date.
+  date                   String
+  customerName           String
+  customerEmail          String
+  customerPhone          String
+  notes                  String?
+  /// ONLINE | MANAGER
+  createdVia             String
+  createdByUserId        String?
+  holdExpiresAt          DateTime?
+  /// Money frozen at confirmation (R-68). Integer cents, always.
+  preTaxSubtotalCents    Int       @default(0)
+  taxCents               Int       @default(0)
+  taxIncludedTotalCents  Int       @default(0)
+  totalCents             Int       @default(0)
+  /// Thousandths of a percent (12.0% = 12000) so tax is integer arithmetic end to end.
+  taxRateMilliPercentSnapshot Int  @default(0)
+  acknowledgedShoePolicy Boolean   @default(false)
+  acknowledgedFoodPolicy Boolean   @default(false)
+  /// R-13: a manager override that breached a physical constraint, with its reason.
+  overrideReason         String?
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @updatedAt
+
+  createdBy   ManagerUser?       @relation(fields: [createdByUserId], references: [id])
+  publicGame  PublicGameBooking?
+  party       PartyBooking?
+  roomSlots   BookingRoomSlot[]
+  games       BookingGame[]
+  addOns      BookingAddOn[]
+  deposit     Deposit?
+  giftCards   GiftCard[]
+  changeLog   BookingChangeLog[]
+
+  @@index([date, status])
+}
+
+model PublicGameBooking {
+  bookingId                   String @id
+  playerCount                 Int
+  gameCount                   Int
+  pricePerPersonCentsSnapshot Int
+
+  booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+}
+
+model PartyBooking {
+  bookingId                     String @id
+  partyWindowId                 String
+  roomConfigurationId           String
+  packageId                     String
+  guestCount                    Int
+  honoreeName                   String
+  /// R-34. Integer. OQ-25: the age the honoree is turning.
+  honoreeAge                    Int
+  /// PIZZA | HOT_DOGS | NONE
+  foodChoice                    String @default("NONE")
+  /// Snapshot of the R-41 tier lookup at confirmation.
+  includedPizzaCount            Int    @default(0)
+  packagePriceCentsSnapshot     Int
+  extraGuestPriceCentsSnapshot  Int
+  /// The instant the party window starts, used for the R-56 notice calculation.
+  windowStartsAtUtc             DateTime
+  windowEndsAtUtc               DateTime
+
+  booking           Booking           @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  partyWindow       PartyWindow       @relation(fields: [partyWindowId], references: [id])
+  roomConfiguration RoomConfiguration @relation(fields: [roomConfigurationId], references: [id])
+  packageRef        Package           @relation(fields: [packageId], references: [id])
+
+  /// R-35: this index is the query behind the age rule.
+  @@index([partyWindowId])
+}
+
+/// R-29 / R-30. THE ROOM CONSTRAINT. One row per member room of the chosen configuration,
+/// so a 3-room configuration writes 3 rows and naturally consumes 3 room-slots.
+///
+/// CONCURRENCY GUARANTEE
+/// ---------------------
+/// `@@unique([roomId, startsAtUtc])` makes the common race — two parents confirming the
+/// last free room in the SAME window on the SAME date — a database error (P2002) rather
+/// than a logic race. Both transactions compute "the room is free", both INSERT, exactly
+/// one commits. No amount of read-then-write interleaving can defeat a unique index.
+///
+/// Rows exist only for live bookings (HOLD / CONFIRMED). Cancelling DELETES them, which is
+/// what frees the room; BookingChangeLog keeps the audit trail (R-62).
+///
+/// PARTIAL overlaps (two different windows that share a room, e.g. Sun 15:00-17:00 and
+/// 16:00-18:00 if a manager ever maps them onto the same room) are NOT caught by the unique
+/// index because the start instants differ. Those are caught by the overlap check inside the
+/// booking transaction (roomsOverlap / R-30). On SQLite that check is safe because Prisma
+/// serialises writers; on Postgres the transaction takes `SELECT ... FOR UPDATE` on the
+/// candidate rooms first. In production add the exact constraint Postgres can express and
+/// SQLite cannot, which removes the need for the lock entirely:
+///
+///   ALTER TABLE "BookingRoomSlot" ADD CONSTRAINT booking_room_slot_no_overlap
+///     EXCLUDE USING gist ("roomId" WITH =, tstzrange("startsAtUtc","endsAtUtc") WITH &&);
+model BookingRoomSlot {
+  id          String   @id @default(cuid())
+  bookingId   String
+  roomId      String
+  /// "YYYY-MM-DD" local Winnipeg calendar date.
+  date        String
+  startsAtUtc DateTime
+  endsAtUtc   DateTime
+
+  booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  room    Room    @relation(fields: [roomId], references: [id])
+
+  @@unique([roomId, startsAtUtc])
+  @@index([roomId, date])
+  @@index([bookingId])
+}
+
+/// R-12 / R-64. THE ARENA CONSTRAINT, and deliberately a different table from the room
+/// constraint (R-31): neither implies the other.
+///
+/// The 25-player cap is a SUM, not a row count, so it cannot be a unique index. It is
+/// enforced inside the same transaction as the insert, after re-reading
+/// `SUM(playerCount) WHERE gameSlotId = ?`. See src/lib/db/booking-repository.ts.
+///
+/// `@@unique([bookingId, gameSlotId])` enforces R-64's "two arena groups of the same
+/// booking MUST NOT share a slot" — sharing would put all P players in the arena at once,
+/// which is the exact thing the split exists to prevent.
+model BookingGame {
+  id              String @id @default(cuid())
+  bookingId       String
+  gameSlotId      String
+  arenaGroupIndex Int    @default(0)
+  playerCount     Int
+  partyGameSetId  String?
+  /// CONFIGURED_SET | AUTO_APPENDED | MANAGER
+  assignmentSource String
+
+  booking      Booking       @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  gameSlot     GameSlot      @relation(fields: [gameSlotId], references: [id])
+  partyGameSet PartyGameSet? @relation(fields: [partyGameSetId], references: [id])
+
+  @@unique([bookingId, gameSlotId])
+  @@index([gameSlotId])
+}
+
+model BookingAddOn {
+  id                     String  @id @default(cuid())
+  bookingId              String
+  addOnId                String
+  quantity               Int
+  addOnOptionId          String?
+  unitPriceCentsSnapshot Int
+  taxIncludedSnapshot    Boolean
+  lineTotalCents         Int
+
+  booking Booking      @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  addOn   AddOn        @relation(fields: [addOnId], references: [id])
+  option  AddOnOption? @relation(fields: [addOnOptionId], references: [id])
+
+  @@index([bookingId])
+}
+
+/// R-53. No card data is ever stored. Checkout is simulated: the deposit is RECORDED.
+model Deposit {
+  id                 String    @id @default(cuid())
+  bookingId          String    @unique
+  amountCents        Int
+  /// RECORDED | APPLIED | FORFEITED | CONVERTED_TO_GIFT_CARD | CARRIED_FORWARD
+  status             String
+  simulatedReference String
+  recordedAt         DateTime  @default(now())
+  resolvedAt         DateTime?
+
+  booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+}
+
+/// R-57 / R-61. Issued when a cancellation clears the 14-day boundary. Never a cash refund.
+model GiftCard {
+  id                  String    @id @default(cuid())
+  code                String    @unique
+  amountCents         Int
+  issuedFromBookingId String
+  issuedAt            DateTime  @default(now())
+  redeemedAt          DateTime?
+  /// OQ-14: the brief states no expiry. Null = never expires.
+  expiresAt           DateTime?
+  isActive            Boolean   @default(true)
+
+  issuedFromBooking Booking @relation(fields: [issuedFromBookingId], references: [id])
+}
+
+/// R-62. Append-only.
+model BookingChangeLog {
+  id          String   @id @default(cuid())
+  bookingId   String
+  /// CREATED | CONFIRMED | RESCHEDULED | CANCELLED | OVERRIDDEN | ADDON_CHANGED | DEPOSIT_RESOLVED
+  action      String
+  /// CUSTOMER | MANAGER | SYSTEM
+  actorType   String
+  actorUserId String?
+  /// JSON text (SQLite has no Json column; Postgres can widen this to jsonb later).
+  beforeJson  String?
+  afterJson   String?
+  reason      String?
+  createdAt   DateTime @default(now())
+
+  booking Booking      @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  actor   ManagerUser? @relation(fields: [actorUserId], references: [id])
+
+  @@index([bookingId, createdAt])
+}
+
+model ManagerUser {
+  id           String    @id @default(cuid())
+  email        String    @unique
+  passwordHash String
+  name         String
+  /// MANAGER | STAFF
+  role         String    @default("STAFF")
+  isActive     Boolean   @default(true)
+  lastLoginAt  DateTime?
+  createdAt    DateTime  @default(now())
+
+  settingsUpdated Setting[]
+  bookings        Booking[]
+  changeLogs      BookingChangeLog[]
+}
