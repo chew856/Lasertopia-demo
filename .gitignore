@@ -45,6 +45,11 @@ next-env.d.ts
 
 # prisma local dev database
 prisma/*.db
+
+# ...except the seeded demo template, which IS committed on purpose. It holds
+# configuration only (rooms, windows, packages, prices, settings) and no bookings.
+# Serverless copies it to /tmp at cold start so the demo has data to work with.
+!prisma/demo.db
 prisma/*.db-journal
 prisma/*.db-wal
 prisma/*.db-shm
